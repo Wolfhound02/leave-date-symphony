@@ -10,7 +10,10 @@ export const useLeaveDates = () => {
     queryFn: getLeaveDatesFromSharePoint,
     staleTime: 1000 * 60 * 5, // 5 minutes
     retry: 2,
-    onError: (error) => {
+    onSuccess: (data) => {
+      console.log('Leave dates loaded successfully:', data);
+    },
+    onError: (error: Error) => {
       console.error('Error fetching leave dates:', error);
       toast.error('Failed to load leave dates');
     }
