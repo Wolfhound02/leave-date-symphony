@@ -15,24 +15,30 @@ import { execSync } from 'child_process';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Build the application
 console.log('Building application for SharePoint...');
-execSync('npm run build', { stdio: 'inherit' });
 
-// Create a SharePoint deployment folder
-const deployDir = path.resolve(__dirname, '../sharepoint-deploy');
-if (!fs.existsSync(deployDir)) {
-  fs.mkdirSync(deployDir);
-}
+try {
+  // Use NPX to ensure vite is found even if not in PATH
+  console.log('Running build command...');
+  execSync('npx vite build', { 
+    stdio: 'inherit',
+    env: { ...process.env }
+  });
+  
+  // Create a SharePoint deployment folder
+  const deployDir = path.resolve(__dirname, '../sharepoint-deploy');
+  if (!fs.existsSync(deployDir)) {
+    fs.mkdirSync(deployDir);
+  }
 
-// Copy the necessary files to the deployment folder
-console.log('Preparing SharePoint deployment package...');
+  // Copy the necessary files to the deployment folder
+  console.log('Preparing SharePoint deployment package...');
 
-// Copy main assets
-fs.cpSync(path.resolve(__dirname, '../dist'), deployDir, { recursive: true });
+  // Copy main assets
+  fs.cpSync(path.resolve(__dirname, '../dist'), deployDir, { recursive: true });
 
-// Create a simple README with instructions
-const readme = `
+  // Create a simple README with instructions
+  const readme = `
 # SharePoint Leave Date Manager Deployment
 
 This folder contains all the files needed to deploy the Leave Date Manager app to SharePoint.
@@ -57,7 +63,16 @@ This folder contains all the files needed to deploy the Leave Date Manager app t
 Replace [hash] with the actual hash in the filenames, and YourSiteName with your actual SharePoint site name.
 `;
 
-fs.writeFileSync(path.resolve(deployDir, 'README.md'), readme);
+  fs.writeFileSync(path.resolve(deployDir, 'README.md'), readme);
 
-console.log('SharePoint deployment package created successfully!');
-console.log(`Files are ready in: ${deployDir}`);
+  console.log('SharePoint deployment package created successfully!');
+  console.log(`Files are ready in: ${deployDir}`);
+  
+} catch (error) {
+  console.error('Build failed with error:', error.message);
+  console.log('\nTROUBLESHOOTING TIPS:');
+  console.log('1. Make sure all dependencies are installed: npm install');
+  console.log('2. Try installing vite globally: npm install -g vite');
+  console.log('3. Check for any TypeScript errors in your project');
+  process.exit(1);
+}
