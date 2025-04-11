@@ -1,5 +1,6 @@
 
 import { LeaveDate } from './dateUtils';
+import { toast } from 'sonner';
 
 // Type definition for SharePoint list item
 interface SPListItem {
@@ -12,8 +13,13 @@ interface SPListItem {
 }
 
 // SharePoint API URL will be relative in a SharePoint-hosted app
-const getSPListApiUrl = (listName: string) => {
-  return `_api/web/lists/getbytitle('${listName}')/items`;
+const getSPListApiUrl = (listName: string): string => {
+  const spContext = window._spPageContextInfo;
+  if (!spContext) {
+    return `_api/web/lists/getbytitle('${listName}')/items`;
+  }
+  
+  return `${spContext.webAbsoluteUrl}/_api/web/lists/getbytitle('${listName}')/items`;
 };
 
 // Get leave dates from a SharePoint list
@@ -27,6 +33,7 @@ export const getLeaveDatesFromSharePoint = async (): Promise<LeaveDate[]> => {
       return generateSampleLeaveDates();
     }
 
+    console.log("Fetching data from SharePoint list");
     // In SharePoint, make an actual API call
     const response = await fetch(getSPListApiUrl('LeaveDates'), {
       method: 'GET',
@@ -51,6 +58,7 @@ export const getLeaveDatesFromSharePoint = async (): Promise<LeaveDate[]> => {
     }));
   } catch (error) {
     console.error('Error fetching leave dates from SharePoint:', error);
+    toast.error('Failed to load leave dates. Please try again.');
     throw error;
   }
 };
@@ -66,13 +74,17 @@ export const bookLeaveInSharePoint = async (dateId: number, userId: string): Pro
   // In SharePoint, make an actual API call
   try {
     // Get request digest for form validation
-    const digestResponse = await fetch('_api/contextinfo', {
+    const digestResponse = await fetch(`${window._spPageContextInfo.webAbsoluteUrl}/_api/contextinfo`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json;odata=verbose',
         'Content-Type': 'application/json;odata=verbose',
       }
     });
+    
+    if (!digestResponse.ok) {
+      throw new Error('Failed to get form digest value');
+    }
     
     const digestData = await digestResponse.json();
     const formDigestValue = digestData.d.GetContextWebInformation.FormDigestValue;
@@ -97,6 +109,62 @@ export const bookLeaveInSharePoint = async (dateId: number, userId: string): Pro
     return response.ok;
   } catch (error) {
     console.error('Error booking leave in SharePoint:', error);
+    toast.error('Failed to book leave. Please try again.');
+    return false;
+  }
+};
+
+// Import dates from CSV to SharePoint
+export const importDatesToSharePoint = async (leaveDates: LeaveDate[]): Promise<boolean> => {
+  if (!window._spPageContextInfo) {
+    console.log("Development mode: Simulating SharePoint import");
+    return Promise.resolve(true);
+  }
+  
+  try {
+    // Get request digest
+    const digestResponse = await fetch(`${window._spPageContextInfo.webAbsoluteUrl}/_api/contextinfo`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json;odata=verbose',
+        'Content-Type': 'application/json;odata=verbose',
+      }
+    });
+    
+    if (!digestResponse.ok) {
+      throw new Error('Failed to get form digest value');
+    }
+    
+    const digestData = await digestResponse.json();
+    const formDigestValue = digestData.d.GetContextWebInformation.FormDigestValue;
+    
+    // Create batch of requests to create list items
+    const batchPromises = leaveDates.map(async (leaveDate) => {
+      const response = await fetch(getSPListApiUrl('LeaveDates'), {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json;odata=verbose',
+          'Content-Type': 'application/json;odata=verbose',
+          'X-RequestDigest': formDigestValue
+        },
+        body: JSON.stringify({
+          '__metadata': { 'type': 'SP.Data.LeaveDatesListItem' },
+          'Title': `Leave Date ${leaveDate.date}`,
+          'Date': leaveDate.date,
+          'MaxSlots': leaveDate.maxSlots,
+          'BookedSlots': 0,
+          'BookedBy': ''
+        })
+      });
+      
+      return response.ok;
+    });
+    
+    const results = await Promise.all(batchPromises);
+    return results.every(result => result === true);
+  } catch (error) {
+    console.error('Error importing dates to SharePoint:', error);
+    toast.error('Failed to import dates. Please try again.');
     return false;
   }
 };

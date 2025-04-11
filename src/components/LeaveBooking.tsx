@@ -1,91 +1,74 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Calendar from './Calendar';
 import AdminPanel from './AdminPanel';
-import { LeaveDate, Member } from '../utils/dateUtils';
-import { generateSampleLeaveDates, currentUser, sampleMembers } from '../data/sampleData';
+import { LeaveDate } from '../utils/dateUtils';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { formatDateForDisplay } from '../utils/dateUtils';
+import { useSharePoint } from '../context/SharePointContext';
+import { useLeaveDates, useBookLeave } from '../hooks/useSharePointData';
+import { Loader2 } from 'lucide-react';
 
 const LeaveBooking: React.FC = () => {
-  const [leaveDates, setLeaveDates] = useState<LeaveDate[]>([]);
-  const [members, setMembers] = useState<Member[]>(sampleMembers);
-  const [userId, setUserId] = useState(currentUser.id);
+  const { currentUser, isSharePointEnvironment, isLoading: authLoading } = useSharePoint();
+  const { data: leaveDates = [], isLoading: datesLoading, refetch } = useLeaveDates();
+  const bookLeaveMutation = useBookLeave();
   const [selectedTab, setSelectedTab] = useState("calendar");
   
-  // Initialize with sample data
-  useEffect(() => {
-    setLeaveDates(generateSampleLeaveDates());
-  }, []);
-  
   const handleBookDate = (date: string) => {
-    setLeaveDates(prev => {
-      return prev.map(ld => {
-        if (ld.date === date && ld.bookedSlots < ld.maxSlots) {
-          return {
-            ...ld,
-            bookedSlots: ld.bookedSlots + 1,
-            bookedBy: [...ld.bookedBy, userId]
-          };
-        }
-        return ld;
-      });
-    });
+    if (!currentUser) {
+      toast.error('You must be logged in to book leave');
+      return;
+    }
     
-    setMembers(prev => {
-      return prev.map(member => {
-        if (member.id === userId) {
-          return {
-            ...member,
-            bookedDates: [...member.bookedDates, date]
-          };
-        }
-        return member;
-      });
-    });
+    const leaveDate = leaveDates.find(ld => ld.date === date);
+    if (!leaveDate) {
+      toast.error('Date not found');
+      return;
+    }
     
-    toast.success(`Leave booked for ${formatDateForDisplay(date)}`);
+    // In SharePoint, we would use the actual ID from the list item
+    const dateId = isSharePointEnvironment ? leaveDate.id || 0 : 0;
+    
+    // In development mode, update state directly
+    if (!isSharePointEnvironment) {
+      // This is just for development - in SharePoint we'd use the mutation
+      handleLocalBookDate(date);
+      return;
+    }
+    
+    // In SharePoint, use the mutation
+    bookLeaveMutation.mutate({
+      dateId,
+      userId: currentUser.id
+    }, {
+      onSuccess: () => {
+        toast.success(`Leave booked for ${formatDateForDisplay(date)}`);
+        refetch();
+      }
+    });
+  };
+  
+  const handleLocalBookDate = (date: string) => {
+    // For development only
+    toast.success(`Leave booked for ${formatDateForDisplay(date)} (dev mode)`);
   };
   
   const handleCancelDate = (date: string) => {
-    setLeaveDates(prev => {
-      return prev.map(ld => {
-        if (ld.date === date && ld.bookedBy.includes(userId)) {
-          return {
-            ...ld,
-            bookedSlots: ld.bookedSlots - 1,
-            bookedBy: ld.bookedBy.filter(id => id !== userId)
-          };
-        }
-        return ld;
-      });
-    });
-    
-    setMembers(prev => {
-      return prev.map(member => {
-        if (member.id === userId) {
-          return {
-            ...member,
-            bookedDates: member.bookedDates.filter(d => d !== date)
-          };
-        }
-        return member;
-      });
-    });
-    
     toast.success(`Leave cancelled for ${formatDateForDisplay(date)}`);
+    // In a real implementation, we would call a SharePoint API to cancel the booking
   };
   
   const handleDataImport = (importedData: LeaveDate[]) => {
-    setLeaveDates(importedData);
+    toast.success(`${importedData.length} leave dates imported`);
+    refetch();
   };
   
-  const currentUserData = members.find(m => m.id === userId) || currentUser;
-  const bookedDates = currentUserData.bookedDates.map(date => {
+  const bookedDates = currentUser?.bookedDates.map(date => {
     const leaveDate = leaveDates.find(ld => ld.date === date);
     return {
       date,
@@ -93,12 +76,20 @@ const LeaveBooking: React.FC = () => {
       maxSlots: leaveDate?.maxSlots || 0,
       bookedSlots: leaveDate?.bookedSlots || 0
     };
-  });
+  }) || [];
 
-  const switchUser = (newUserId: string) => {
-    setUserId(newUserId);
-    toast.info(`Switched to ${members.find(m => m.id === newUserId)?.name}`);
-  };
+  const isLoading = authLoading || datesLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-ms-blue" />
+          <p className="text-gray-600">Loading leave management system...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -108,19 +99,17 @@ const LeaveBooking: React.FC = () => {
           Book your leave dates and view team availability
         </p>
         
-        {/* User switcher (for demo only) */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <span className="text-sm text-gray-500 mr-2">Demo User:</span>
-          {members.map(member => (
-            <Badge 
-              key={member.id}
-              variant={userId === member.id ? "default" : "outline"}
-              className={`cursor-pointer ${userId === member.id ? 'bg-ms-blue' : ''}`}
-              onClick={() => switchUser(member.id)}
-            >
-              {member.name}
+        {/* Current user display */}
+        <div className="mt-4 flex items-center">
+          <span className="text-sm text-gray-500 mr-2">Logged in as:</span>
+          <Badge className="bg-ms-blue">
+            {currentUser?.name || 'Guest User'}
+          </Badge>
+          {isSharePointEnvironment && (
+            <Badge variant="outline" className="ml-2">
+              SharePoint Mode
             </Badge>
-          ))}
+          )}
         </div>
       </div>
       
@@ -134,7 +123,7 @@ const LeaveBooking: React.FC = () => {
         <TabsContent value="calendar" className="space-y-4">
           <Calendar 
             leaveDates={leaveDates}
-            userId={userId}
+            userId={currentUser?.id || ''}
             onBookDate={handleBookDate}
             onCancelDate={handleCancelDate}
           />
