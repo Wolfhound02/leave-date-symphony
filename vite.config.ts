@@ -20,11 +20,11 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  base: process.env.BASE_URL || '/',
   build: {
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'index.html'),
-        sharepoint: path.resolve(__dirname, 'public/sharepoint.html')
+        main: path.resolve(__dirname, 'index.html')
       },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',
@@ -34,8 +34,6 @@ export default defineConfig(({ mode }) => ({
     },
     outDir: 'dist',
     sourcemap: true,
-    // Create optimized SharePoint-compatible files
-    target: ['es2015'],
     minify: 'terser'
   }
 }));
