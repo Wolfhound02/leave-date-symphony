@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  base: process.env.BASE_URL || '/',
+  base: '/',  // Changed to root path for custom domain
   build: {
     rollupOptions: {
       input: {
