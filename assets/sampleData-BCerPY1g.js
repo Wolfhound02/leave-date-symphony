@@ -1,0 +1,2 @@
+import{t,c as o,f as a}from"./main-CBMaibsm.js";function e(a,e){const s=t(a);return isNaN(e)?o(a,NaN):e?(s.setDate(s.getDate()+e),s):s}const s=()=>{const t=new Date,o=[];for(let s=1;s<=60;s++){const n=e(t,s),r=a(n,"yyyy-MM-dd"),c=Math.floor(2*Math.random())+2;o.push({date:r,maxSlots:c,bookedSlots:0,bookedBy:[]})}return o};export{s as generateSampleLeaveDates};
+//# sourceMappingURL=sampleData-BCerPY1g.js.map
